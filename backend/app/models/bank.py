@@ -1,0 +1,17 @@
+from datetime import datetime
+from sqlalchemy import String, DateTime, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from ..database import Base
+
+
+class QuestionBank(Base):
+    __tablename__ = "question_banks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    questions: Mapped[list["Question"]] = relationship(back_populates="bank", cascade="all, delete-orphan")

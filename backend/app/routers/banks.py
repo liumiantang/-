@@ -1,0 +1,117 @@
+import os
+import shutil
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..models.bank import QuestionBank
+from ..models.question import Question
+from ..models.quiz import QuizAnswer
+from ..services import bank_service
+
+router = APIRouter()
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "uploads")
+
+
+@router.get("/banks")
+def list_banks(db: Session = Depends(get_db)):
+    banks = bank_service.list_banks(db)
+    return [
+        {
+            "id": b.id,
+            "name": b.name,
+            "description": b.description,
+            "question_count": len(b.questions),
+            "created_at": b.created_at.isoformat() if b.created_at else None,
+        }
+        for b in banks
+    ]
+
+
+@router.post("/banks")
+def create_bank(name: str = Form(...), description: str = Form(""), db: Session = Depends(get_db)):
+    bank = bank_service.create_bank(db, name, description)
+    return {"id": bank.id, "name": bank.name, "description": bank.description}
+
+
+@router.get("/banks/{bank_id}")
+def get_bank(bank_id: int, db: Session = Depends(get_db)):
+    bank = bank_service.get_bank(db, bank_id)
+    if not bank:
+        raise HTTPException(404, "题库不存在")
+    return {
+        "id": bank.id,
+        "name": bank.name,
+        "description": bank.description,
+        "question_count": len(bank.questions),
+        "created_at": bank.created_at.isoformat() if bank.created_at else None,
+    }
+
+
+@router.delete("/banks/{bank_id}")
+def delete_bank(bank_id: int, db: Session = Depends(get_db)):
+    ok = bank_service.delete_bank(db, bank_id)
+    if not ok:
+        raise HTTPException(404, "题库不存在")
+    return {"ok": True}
+
+
+@router.post("/banks/{bank_id}/import")
+def import_questions(bank_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    filepath = os.path.join(UPLOAD_DIR, file.filename)
+
+    with open(filepath, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    try:
+        count = bank_service.import_document(db, bank_id, filepath, file.filename)
+        return {"imported": count, "filename": file.filename}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/banks/wrong-answer-book")
+def create_wrong_answer_book(db: Session = Depends(get_db)):
+    # Find all wrong-answered questions
+    wrong_rows = (
+        db.query(QuizAnswer.question_id)
+        .filter(QuizAnswer.is_correct == False)  # noqa: E712
+        .distinct()
+        .all()
+    )
+    wrong_ids = [r[0] for r in wrong_rows]
+
+    if not wrong_ids:
+        return {"ok": True, "bank_id": None, "message": "暂无错题"}
+
+    # Find or create "错题本" bank
+    bank = db.query(QuestionBank).filter(QuestionBank.name == "错题本").first()
+    if bank:
+        # Clear old questions
+        db.query(Question).filter(Question.bank_id == bank.id).delete()
+    else:
+        bank = QuestionBank(name="错题本", description="自动生成的错题本")
+        db.add(bank)
+        db.flush()
+
+    # Copy wrong questions into the bank
+    count = 0
+    for qid in wrong_ids:
+        orig = db.query(Question).filter(Question.id == qid).first()
+        if orig:
+            copy = Question(
+                bank_id=bank.id,
+                type=orig.type,
+                difficulty=orig.difficulty,
+                content=orig.content,
+                answer=orig.answer,
+                explanation=orig.explanation,
+            )
+            copy.tags = orig.tags
+            copy.options = orig.options
+            db.add(copy)
+            count += 1
+
+    db.commit()
+    return {"ok": True, "bank_id": bank.id, "count": count}

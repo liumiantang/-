@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+.venv/
+venv/
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+
+# Environment
+.env
+server.log
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Uploads (user data)
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
