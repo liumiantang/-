@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getBank, getQuestions, importDocument, deleteQuestion, updateQuestion } from '../api';
+import { getBank, getQuestions, importDocument, deleteQuestion, updateQuestion, aiExplain } from '../api';
 import type { QuestionBank, Question } from '../types';
 
 export default function BankDetailPage() {
@@ -17,6 +17,7 @@ export default function BankDetailPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAnswer, setEditAnswer] = useState('');
   const [saving, setSaving] = useState(false);
+  const [explainingId, setExplainingId] = useState<number | null>(null);
 
   const load = () => {
     getBank(bankId).then(setBank);
@@ -60,6 +61,18 @@ export default function BankDetailPage() {
     setSaving(false);
     setEditingId(null);
     load();
+  };
+
+  const handleAiExplain = async (q: Question) => {
+    setExplainingId(q.id);
+    try {
+      const res = await aiExplain(q.id);
+      // Update local state with new explanation
+      setQuestions(prev => prev.map(p => p.id === q.id ? { ...p, explanation: res.explanation } : p));
+    } catch (err: any) {
+      alert('AI 解析失败: ' + (err.response?.data?.detail || err.message));
+    }
+    setExplainingId(null);
   };
 
   const typeLabel = (t: string) => {
@@ -173,7 +186,17 @@ export default function BankDetailPage() {
                       style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', textDecoration: 'underline' }}>
                       编辑
                     </button>
-                    {q.explanation && <span style={{ color: '#9ca3af', marginLeft: '8px' }}>解析: {q.explanation}</span>}
+                    {q.explanation && <span style={{ color: '#9ca3af', marginLeft: '8px', flex: 1 }}>解析: {q.explanation}</span>}
+                    <button
+                      onClick={() => handleAiExplain(q)}
+                      disabled={explainingId === q.id}
+                      style={{
+                        background: 'none', border: 'none', color: '#8b5cf6', fontSize: '12px',
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {explainingId === q.id ? '⏳ 解析中...' : '🤖 AI 解析'}
+                    </button>
                   </div>
                 )}
               </div>

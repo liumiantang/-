@@ -20,5 +20,5 @@ def get_db():
 
 
 def init_db():
-    from .models import bank, question, quiz  # noqa: F401
+    from .models import bank, question, quiz, review  # noqa: F401
     Base.metadata.create_all(bind=engine)

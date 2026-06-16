@@ -44,6 +44,9 @@ def import_document(db: Session, bank_id: int, filepath: str, original_filename:
     if ext in ("xlsx", "xls"):
         from ..parser.excel_parser import ExcelParser
         parsed = ExcelParser().parse_file(filepath)
+    elif ext == "csv":
+        from ..parser.csv_parser import CsvParser
+        parsed = CsvParser().parse_file(filepath)
     else:
         parsed = AutoParser().parse_file(filepath)
 

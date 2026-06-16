@@ -18,7 +18,8 @@ class StartQuizRequest(BaseModel):
     tags: Optional[list[str]] = None
     type_filter: Optional[list[str]] = None
     exclude_previous_correct: bool = False
-    mode: str = "exam"  # "practice" or "exam"
+    mode: str = "exam"  # "practice", "exam", or "review" (Ebbinghaus spaced repetition)
+    time_limit: Optional[int] = None  # 考试时间限制（分钟），仅 exam 模式有效
 
 
 @router.get("/quiz/history")
@@ -39,6 +40,7 @@ def start_quiz(req: StartQuizRequest, db: Session = Depends(get_db)):
         type_filter=req.type_filter,
         exclude_previous_correct=req.exclude_previous_correct,
         mode=req.mode,
+        time_limit=req.time_limit,
     )
     _, items = quiz_service.get_session(db, session.id)
     return {
@@ -58,6 +60,8 @@ def get_quiz(session_id: int, db: Session = Depends(get_db)):
         "is_finished": session.is_finished,
         "total_questions": session.total_questions,
         "score": session.score if session.is_finished else None,
+        "time_limit": session.settings.get("time_limit") if session.settings else None,
+        "started_at": session.started_at.isoformat() if session.started_at else None,
         "questions": items,
     }
 
@@ -72,7 +76,12 @@ def submit_answer(session_id: int, req: AnswerRequest, db: Session = Depends(get
     # Get mode from session settings
     from ..models.quiz import QuizSession
     session = db.query(QuizSession).filter(QuizSession.id == session_id).first()
-    mode = session.settings.get("mode", "exam") if session else "exam"
+    if not session:
+        raise HTTPException(404, "作答记录不存在")
+    # Check time expiry for exam mode
+    if quiz_service.is_time_expired(session):
+        raise HTTPException(400, "考试时间已到，请交卷")
+    mode = session.settings.get("mode", "exam") if session.settings else "exam"
     result = quiz_service.submit_answer(db, session_id, req.answer_id, req.user_answer, mode=mode)
     if result is None:
         raise HTTPException(404, "记录不存在")

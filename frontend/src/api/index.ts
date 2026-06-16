@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { QuestionBank, Question, QuizSession, QuizHistoryItem, StartQuizParams } from '../types';
+import type { QuestionBank, Question, QuizSession, QuizHistoryItem, StartQuizParams, UserStats, AiConfig, AiGenerateResult, AiUsage, ReviewDue, ReviewStats } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -51,3 +51,33 @@ export const getFavorites = () =>
 // Wrong book
 export const createWrongBook = () =>
   api.post('/banks/wrong-answer-book').then(r => r.data);
+
+// Stats
+export const getStats = () =>
+  api.get<UserStats>('/stats').then(r => r.data);
+
+// AI
+export const getAiConfig = () =>
+  api.get<AiConfig>('/ai/config').then(r => r.data);
+export const updateAiConfig = (data: Record<string, string>) =>
+  api.put('/ai/config', data).then(r => r.data);
+export const testAiConnection = () =>
+  api.post<{ ok: boolean; reply?: string; error?: string }>('/ai/test').then(r => r.data);
+export const aiGenerate = (data: { text: string; bank_id: number; count: number; types: string[]; difficulty: number }) =>
+  api.post<AiGenerateResult>('/ai/generate', data).then(r => r.data);
+export const aiExplain = (questionId: number) =>
+  api.post<{ explanation: string; question_id: number }>(`/ai/explain/${questionId}`).then(r => r.data);
+export const getAiUsage = () =>
+  api.get<AiUsage>('/ai/usage').then(r => r.data);
+export const clearAiUsage = () =>
+  api.delete('/ai/usage').then(r => r.data);
+
+// Review (Ebbinghaus)
+export const getReviewDue = (bankIds?: number[], limit?: number) => {
+  const params: Record<string, string> = {};
+  if (bankIds && bankIds.length > 0) params.bank_ids = bankIds.join(',');
+  if (limit) params.limit = String(limit);
+  return api.get<ReviewDue>('/review/due', { params }).then(r => r.data);
+};
+export const getReviewStats = () =>
+  api.get<ReviewStats>('/review/stats').then(r => r.data);

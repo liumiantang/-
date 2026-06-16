@@ -35,6 +35,8 @@ export interface QuizSession {
   is_finished: boolean;
   total_questions: number;
   score: number | null;
+  time_limit?: number;
+  started_at?: string;
   questions: QuizQuestion[];
 }
 
@@ -55,5 +57,76 @@ export interface StartQuizParams {
   tags?: string[];
   type_filter?: string[];
   exclude_previous_correct: boolean;
-  mode: 'practice' | 'exam';
+  mode: 'practice' | 'exam' | 'review';
+  time_limit?: number;
+}
+
+export interface AiConfig {
+  provider: string;
+  has_key: boolean;
+  api_base: string;
+  model: string;
+  presets: Record<string, { api_base: string; model: string }>;
+}
+
+export interface AiGenerateResult {
+  imported: number;
+  questions: Question[];
+}
+
+export interface UserStats {
+  total_answers: number;
+  correct_answers: number;
+  accuracy: number;
+  max_streak: number;
+  total_study_days: number;
+  consecutive_days: number;
+  checked_in_today: boolean;
+  today_sessions: number;
+  study_dates: string[];
+  tier: {
+    name: string;
+    icon: string;
+    color: string;
+    stars: number;
+    star_tier_name: string;
+  };
+  xp: number;
+  xp_level: number;
+  xp_current: number;
+  xp_next: number;
+}
+
+export interface ReviewDue {
+  count: number;
+  due_count: number;
+  mastered_count: number;
+  stage_distribution: Record<string, number>;
+  questions: Question[];
+}
+
+export interface ReviewStats {
+  total_scheduled: number;
+  due_count: number;
+  mastered_count: number;
+  stage_distribution: Record<string, number>;
+}
+
+export interface AiUsage {
+  total_calls: number;
+  total_tokens: number;
+  total_cost: number;
+  generate: { calls: number; tokens: number };
+  explain: { calls: number; tokens: number };
+  providers: Record<string, { calls: number; tokens: number; cost: number }>;
+  recent: Array<{
+    time: string;
+    action: string;
+    provider: string;
+    model: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cost: number;
+  }>;
 }

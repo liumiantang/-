@@ -1,11 +1,12 @@
 from __future__ import annotations
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from ..models.quiz import QuizSession, QuizAnswer
 from ..models.question import Question
 from .picker_service import pick_questions
+from . import review_service
 
 
 def start_session(
@@ -18,33 +19,46 @@ def start_session(
     type_filter: Optional[list[str]] = None,
     exclude_previous_correct: bool = False,
     mode: str = "exam",
+    time_limit: Optional[int] = None,
 ) -> QuizSession:
     exclude_ids = []
-    if exclude_previous_correct:
-        # Exclude questions user already answered correctly
-        correct_ids = (
-            db.query(QuizAnswer.question_id)
-            .filter(QuizAnswer.is_correct == True)  # noqa: E712
-            .distinct()
-            .all()
-        )
-        exclude_ids = [r[0] for r in correct_ids]
 
-    questions = pick_questions(
-        db=db,
-        bank_ids=bank_ids,
-        count=count,
-        difficulty_min=difficulty_min,
-        difficulty_max=difficulty_max,
-        tags=tags,
-        type_filter=type_filter,
-        exclude_ids=exclude_ids,
-    )
+    if mode == "review":
+        # Review mode: pick questions due for Ebbinghaus review
+        due_questions = review_service.get_due_reviews(db, bank_ids=bank_ids, limit=count)
+        review_question_ids = [q["id"] for q in due_questions]
+        questions = (
+            db.query(Question)
+            .filter(Question.id.in_(review_question_ids))
+            .all()
+        ) if review_question_ids else []
+    else:
+        if exclude_previous_correct:
+            # Exclude questions user already answered correctly
+            correct_ids = (
+                db.query(QuizAnswer.question_id)
+                .filter(QuizAnswer.is_correct == True)  # noqa: E712
+                .distinct()
+                .all()
+            )
+            exclude_ids = [r[0] for r in correct_ids]
+
+        questions = pick_questions(
+            db=db,
+            bank_ids=bank_ids,
+            count=count,
+            difficulty_min=difficulty_min,
+            difficulty_max=difficulty_max,
+            tags=tags,
+            type_filter=type_filter,
+            exclude_ids=exclude_ids,
+        )
 
     session = QuizSession(
         bank_ids=str(bank_ids),
         total_questions=len(questions),
         is_finished=False,
+        started_at=datetime.now(),  # Explicit local time (override SQLite UTC default)
     )
     session.settings = {
         "count": count,
@@ -54,6 +68,7 @@ def start_session(
         "type_filter": type_filter or [],
         "exclude_previous_correct": exclude_previous_correct,
         "mode": mode,
+        "time_limit": time_limit,
     }
     db.add(session)
     db.flush()
@@ -113,11 +128,24 @@ def submit_answer(db: Session, session_id: int, answer_id: int, user_answer: str
     ans.answered_at = datetime.now()
     db.commit()
 
+    # Auto-schedule review for practice and review modes
+    review_info = None
+    if mode in ("practice", "review") and ans.is_correct is not None:
+        review_info = review_service.schedule_review(db, ans.question_id, ans.is_correct)
+
     if mode == "practice":
         return {
             "is_correct": ans.is_correct,
             "correct_answer": q.answer if q.type != "essay" else "",
             "explanation": q.explanation,
+            "review": review_info,
+        }
+    elif mode == "review":
+        return {
+            "is_correct": ans.is_correct,
+            "correct_answer": q.answer if q.type != "essay" else "",
+            "explanation": q.explanation,
+            "review": review_info,
         }
     else:
         # Exam mode: don't reveal correct answer or explanation
@@ -174,6 +202,18 @@ def get_history(db: Session, page: int = 1, page_size: int = 20) -> tuple[list[d
             "finished_at": s.finished_at.isoformat() if s.finished_at else None,
         })
     return result, total
+
+
+def is_time_expired(session: QuizSession) -> bool:
+    """Check if the exam time limit has been reached."""
+    settings = session.settings or {}
+    time_limit = settings.get("time_limit")
+    if not time_limit or session.is_finished:
+        return False
+    if session.started_at is None:
+        return False
+    elapsed = datetime.now() - session.started_at
+    return elapsed.total_seconds() >= time_limit * 60
 
 
 # ── answer checking ──────────────────────────────────────────────

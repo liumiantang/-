@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .database import init_db
-from .routers import banks, questions, quiz
+from .routers import banks, questions, quiz, stats, ai, review
 
 app = FastAPI(title="题库抽题系统", version="1.0.0")
 
@@ -19,6 +19,9 @@ app.add_middleware(
 app.include_router(banks.router, prefix="/api", tags=["题库管理"])
 app.include_router(questions.router, prefix="/api", tags=["题目管理"])
 app.include_router(quiz.router, prefix="/api", tags=["作答"])
+app.include_router(stats.router, tags=["统计"])
+app.include_router(ai.router, tags=["AI"])
+app.include_router(review.router, prefix="/api", tags=["复习"])
 
 
 @app.on_event("startup")

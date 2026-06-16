@@ -79,18 +79,31 @@ class TextParser:
             q.content = q_m.group(1).strip()
 
         # ── options A: B: C: D: ... ──
-        option_lines = re.findall(r'^([A-F])[:：]\s*(.+)$', block, re.MULTILINE)
+        option_lines = re.findall(r'^([A-H])[:：]\s*(.+)$', block, re.MULTILINE)
         if option_lines:
             q.options = {k.strip(): v.strip() for k, v in option_lines}
 
-        # ── 答案: ──
-        a_m = re.search(r'^答案[:：]\s*(.+)$', block, re.MULTILINE)
+        # ── 答案: / 正确答案: ──
+        a_m = re.search(r'^(?:正确)?答案[:：]\s*(.+)$', block, re.MULTILINE)
         if a_m:
             q.answer = a_m.group(1).strip()
 
-        # ── 解析: ──
-        e_m = re.search(r'^解析[:：]\s*(.+)$', block, re.MULTILINE)
+        # ── 解析: (支持多行) ──
+        e_m = re.search(r'^解析[:：]\s*(.+)', block, re.MULTILINE)
         if e_m:
-            q.explanation = e_m.group(1).strip()
+            # Collect explanation starting from match, allowing continuation lines
+            expl_start = e_m.start()
+            expl_lines = []
+            for line in block[expl_start:].split('\n'):
+                stripped = line.strip()
+                # Stop at next labeled section
+                if re.match(r'^(?:Q[:：]|[A-H][:：]|答案[:：]|正确|解析[:：]|\[)', stripped) and expl_lines:
+                    break
+                if stripped:
+                    expl_lines.append(stripped)
+            # Remove the "解析：" prefix from first line
+            if expl_lines:
+                expl_lines[0] = re.sub(r'^解析[:：]\s*', '', expl_lines[0])
+            q.explanation = '\n'.join(expl_lines).strip()
 
         return q

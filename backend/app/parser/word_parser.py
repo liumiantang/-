@@ -11,6 +11,12 @@ class WordParser:
             text = para.text.strip()
             if text:
                 lines.append(text)
+        # Also extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    lines.append(" | ".join(cells))
 
         text = "\n".join(lines)
         return TextParser().parse(text)

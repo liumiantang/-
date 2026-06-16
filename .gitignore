@@ -28,6 +28,10 @@ frontend/node_modules/
 Thumbs.db
 Desktop.ini
 
+# AI config (contains API keys)
+ai_config.json
+ai_usage.json
+
 # Uploads (user data)
 backend/data/uploads/*
 !backend/data/uploads/.gitkeep

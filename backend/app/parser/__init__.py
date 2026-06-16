@@ -3,6 +3,7 @@ from .markdown_parser import MarkdownParser
 from .excel_parser import ExcelParser
 from .word_parser import WordParser
 from .pdf_parser import PDFParser
+from .csv_parser import CsvParser
 
 
 def get_parser(filename: str):
@@ -13,8 +14,8 @@ def get_parser(filename: str):
         "xlsx": ExcelParser,
         "xls": ExcelParser,
         "docx": WordParser,
-        "doc": WordParser,
         "pdf": PDFParser,
+        "csv": CsvParser,
     }
     cls = parsers.get(ext)
     if cls is None:
