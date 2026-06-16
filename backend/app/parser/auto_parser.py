@@ -11,6 +11,9 @@ from .base import ParsedQuestion, TextParser
 QUESTION_RE = re.compile(r'^(?:题目\s*\d+|^\d+)\s*[:：∶︰﹕\.、．]')
 OPTION_LABELED = re.compile(r'([A-H])\s*[\.．、)）:：]')
 
+# Global EasyOCR reader — initialized once and cached
+_easyocr_reader = None
+
 
 class AutoParser:
     """Auto-detect document format and parse accordingly."""
@@ -81,12 +84,16 @@ class AutoParser:
             return "\n".join(lines)
         elif ext == "pdf":
             text = self._extract_pdf_text(filepath)
+            # EasyOCR already produces clean output — skip aggressive _clean_pdf_text
+            if getattr(self, '_used_easyocr', False):
+                return self._clean_easyocr_text(text)
             return self._clean_pdf_text(text)
         return ""
 
     def _extract_pdf_text(self, filepath: str) -> str:
-        """Extract text from PDF. Tries pdfplumber → PyPDF2 → Tesseract OCR."""
+        """Extract text from PDF. Tries pdfplumber → PyPDF2 → EasyOCR → Tesseract."""
         import pdfplumber
+        self._used_easyocr = False
 
         # 1. pdfplumber
         try:
@@ -97,7 +104,13 @@ class AutoParser:
                     if t and t.strip():
                         pages.append(t.strip())
                 if pages:
-                    return "\n\n".join(pages)
+                    total_chars = sum(len(p) for p in pages)
+                    avg_chars = total_chars / len(pages)
+                    # If average chars per page < 200, it's likely just watermarks
+                    # (a real text-based PDF page has hundreds of characters).
+                    # Fall through to OCR for scanned/image-based PDFs.
+                    if avg_chars >= 200:
+                        return "\n\n".join(pages)
         except Exception:
             pass
 
@@ -111,16 +124,102 @@ class AutoParser:
                 if t and t.strip():
                     pages.append(t.strip())
             if pages:
-                return "\n\n".join(pages)
+                total_chars = sum(len(p) for p in pages)
+                avg_chars = total_chars / len(pages)
+                if avg_chars >= 200:
+                    return "\n\n".join(pages)
         except Exception:
             pass
 
-        # 3. Tesseract OCR for scanned/image-based PDFs
+        # 3. EasyOCR for scanned/image-based PDFs (better math & Chinese recognition)
+        ocr_text = self._easyocr_pdf(filepath)
+        if ocr_text.strip():
+            return ocr_text
+
+        # 4. Tesseract OCR fallback
         ocr_text = self._ocr_pdf(filepath)
         if ocr_text.strip():
             return ocr_text
 
         return ""
+
+    def _easyocr_pdf(self, filepath: str) -> str:
+        """OCR using EasyOCR — better at Chinese text and math symbol recognition.
+
+        Uses position-based spatial sorting: text blocks are sorted top-to-bottom,
+        left-to-right, then grouped into lines based on vertical proximity.
+        This preserves the natural reading order of exam documents with
+        multi-column layouts and interspersed formulas.
+        """
+        global _easyocr_reader
+        import numpy as np
+
+        try:
+            if _easyocr_reader is None:
+                import easyocr
+                _easyocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
+
+            import fitz
+            from PIL import Image
+            import io
+
+            doc = fitz.open(filepath)
+            pages_text = []
+
+            for i in range(len(doc)):
+                page = doc[i]
+                pix = page.get_pixmap(dpi=200)
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+                arr = np.array(img)
+                results = _easyocr_reader.readtext(arr)
+
+                # Filter low-confidence and collect with positions
+                blocks = []
+                for r in results:
+                    bbox, text, conf = r
+                    if conf <= 0.3 or not text.strip():
+                        continue
+                    # bbox is [[x1,y1],[x2,y1],[x2,y2],[x1,y2]] (clockwise from top-left)
+                    y_center = (bbox[0][1] + bbox[2][1]) / 2.0
+                    x_left = bbox[0][0]
+                    blocks.append((y_center, x_left, text.strip()))
+
+                if not blocks:
+                    continue
+
+                # Sort blocks: top-to-bottom, then left-to-right
+                blocks.sort(key=lambda b: (b[0], b[1]))
+
+                # Group into lines: blocks within 12px vertical distance are on same line
+                LINE_Y_TOLERANCE = 12.0
+                lines = []
+                current_line = [blocks[0]]
+                for block in blocks[1:]:
+                    if abs(block[0] - current_line[-1][0]) <= LINE_Y_TOLERANCE:
+                        current_line.append(block)
+                    else:
+                        lines.append(current_line)
+                        current_line = [block]
+                if current_line:
+                    lines.append(current_line)
+
+                # Within each line, sort left-to-right and join with spaces
+                page_lines = []
+                for line_blocks in lines:
+                    line_blocks.sort(key=lambda b: b[1])  # sort by x_left
+                    joined = " ".join(b[2] for b in line_blocks)
+                    page_lines.append(joined)
+
+                if page_lines:
+                    pages_text.append("\n".join(page_lines))
+
+            doc.close()
+            if pages_text:
+                self._used_easyocr = True
+                return "\n\n".join(pages_text)
+            return ""
+        except Exception:
+            return ""
 
     def _ocr_pdf(self, filepath: str) -> str:
         """OCR a scanned PDF using Tesseract via pymupdf rendering."""
@@ -150,6 +249,32 @@ class AutoParser:
             return "\n\n".join(pages_text)
         except Exception:
             return ""
+
+    def _clean_easyocr_text(self, text: str) -> str:
+        """Minimal cleanup for EasyOCR output — preserves text block structure."""
+        import re
+
+        # Remove null bytes
+        text = text.replace("\x00", "")
+        # Normalize line endings
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        # Remove repeated watermark/header lines (same line appearing many times)
+        lines = text.split("\n")
+        seen = {}
+        cleaned = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                cleaned.append(line)
+                continue
+            seen[stripped] = seen.get(stripped, 0) + 1
+            # Keep the line if it appears <= 3 times (headers appear on every page)
+            if seen[stripped] <= 3:
+                cleaned.append(line)
+        text = "\n".join(cleaned)
+        # Collapse 3+ blank lines into 2
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text
 
     def _clean_pdf_text(self, text: str) -> str:
         """Clean up PDF extraction artifacts to make text parseable."""
