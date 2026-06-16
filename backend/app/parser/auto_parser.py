@@ -167,8 +167,11 @@ class AutoParser:
         # Collapse 3+ newlines into max 2
         text = re.sub(r"\n{3,}", "\n\n", text)
 
-        # Remove standalone page numbers (1-3 digits on their own line)
-        text = re.sub(r"^\d{1,3}$", "", text, flags=re.MULTILINE)
+        # Remove isolated page numbers: 1-3 digits alone on a line, surrounded by blank lines.
+        # Only matches when separated by blank lines — preserves numeric answers that
+        # are adjacent to question/answer content (e.g. fill-in-answer "42" on its own
+        # line directly under the question text).
+        text = re.sub(r'(?<=\n\n)\d{1,3}(?=\n\n)', '', text)
 
         # Remove spaces between CJK characters (OCR artifact: "国 家" → "国家")
         # Use plain space, NOT \s — \s matches \n and would destroy blank line separators
@@ -518,8 +521,9 @@ class AutoParser:
                 # Remove OCR stray quote characters: "=straight, “/d=curly, ＂=fullwidth
                 ans = re.sub(r'\s*["“”＂]\s*', ' ', ans)
                 ans = ans.strip()
-                # Remove trailing orphan digits (OCR misreads: "5" was actually "义务")
-                ans = re.sub(r'\s+\d{1,2}$', '', ans)
+                # Remove trailing orphan digits only when preceded by CJK text
+                # (OCR artifact: "义务 5" → "义务"). Preserves pure numeric answers ("42").
+                ans = re.sub(r'(?<=[一-鿿])\s+\d{1,2}$', '', ans)
                 current_block["answer"] = ans
 
             # If content has trailing underscore prefix (blank marker), clean it
