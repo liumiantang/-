@@ -5,7 +5,7 @@ import type { UserStats } from '../types';
 export default function StatsPage() {
   const [stats, setStats] = useState<UserStats | null>(null);
 
-  useEffect(() => { getStats().then(setStats); }, []);
+  useEffect(() => { getStats().then(setStats).catch(err => console.error('Failed to load stats:', err)); }, []);
 
   if (!stats) return <div className="empty-state">加载中...</div>;
 

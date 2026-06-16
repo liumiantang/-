@@ -7,7 +7,7 @@ export default function AiUsagePage() {
   const navigate = useNavigate();
   const [usage, setUsage] = useState<AiUsage | null>(null);
 
-  const load = () => getAiUsage().then(setUsage);
+  const load = () => getAiUsage().then(setUsage).catch(err => console.error('Failed to load usage:', err));
 
   useEffect(() => { load(); }, []);
 

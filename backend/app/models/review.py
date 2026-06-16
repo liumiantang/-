@@ -17,7 +17,7 @@ class ReviewSchedule(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey("questions.id"), unique=True, nullable=False)
     stage: Mapped[int] = mapped_column(Integer, default=0)  # 0=never reviewed, 1-6=review stage
-    next_review_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    next_review_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     last_reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     review_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

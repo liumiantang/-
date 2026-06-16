@@ -46,7 +46,7 @@ export interface QuizHistoryItem {
   correct_count: number;
   score: number;
   started_at: string;
-  finished_at: string;
+  finished_at: string | null;
 }
 
 export interface StartQuizParams {
@@ -110,6 +110,30 @@ export interface ReviewStats {
   due_count: number;
   mastered_count: number;
   stage_distribution: Record<string, number>;
+}
+
+export interface SubmitAnswerResponse {
+  is_correct: boolean | null;
+  correct_answer: string;
+  explanation: string;
+  review?: {
+    stage: number;
+    next_review_at: string | null;
+    review_count: number;
+  };
+}
+
+export interface FavoriteItem {
+  favorite_id: number;
+  question_id: number;
+  type: string;
+  difficulty: number;
+  tags: string[];
+  content: string;
+  options: Record<string, string>;
+  answer: string;
+  explanation: string;
+  bank_id: number;
 }
 
 export interface AiUsage {

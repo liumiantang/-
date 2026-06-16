@@ -11,17 +11,27 @@ export default function ReportPage() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [score, setScore] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getQuiz(sessionId).then(data => {
       setQuestions(data.questions);
       setScore(data.score);
       setTotal(data.total_questions);
+      setLoading(false);
+    }).catch(err => {
+      console.error('Failed to load report:', err);
+      setLoadError(true);
+      setLoading(false);
     });
   }, [sessionId]);
 
   const correctCount = questions.filter(q => q.is_correct).length;
   const passColor = score !== null && score >= 60 ? '#16a34a' : '#dc2626';
+
+  if (loadError) return <div className="empty-state" style={{ color: '#dc2626' }}>加载报告失败，请返回重试</div>;
+  if (loading) return <div className="empty-state">加载中...</div>;
 
   return (
     <div>

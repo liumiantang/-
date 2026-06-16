@@ -7,21 +7,30 @@ export default function HomePage() {
   const [banks, setBanks] = useState<QuestionBank[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [reviewDueCount, setReviewDueCount] = useState(0);
+  const [loadError, setLoadError] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [wrongBookLoading, setWrongBookLoading] = useState(false);
   const navigate = useNavigate();
 
-  const load = () => listBanks().then(setBanks);
+  const load = () => listBanks().then(setBanks).catch(err => {
+    console.error('Failed to load banks:', err);
+    setLoadError(true);
+  });
 
-  useEffect(() => { load(); getStats().then(setStats); getReviewDue().then(r => setReviewDueCount(r.due_count)).catch(() => {}); }, []);
+  useEffect(() => { load(); getStats().then(setStats).catch(() => {}); getReviewDue().then(r => setReviewDueCount(r.due_count)).catch(err => console.error('Failed to load review due:', err)); }, []);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-    await createBank(name, desc);
-    setName(''); setDesc(''); setShowCreate(false);
-    load();
+    try {
+      await createBank(name, desc);
+      setName(''); setDesc(''); setShowCreate(false);
+      load();
+    } catch (err) {
+      console.error('Failed to create bank:', err);
+      alert('创建题库失败');
+    }
   };
 
   const handleWrongBook = async () => {
@@ -34,7 +43,8 @@ export default function HomePage() {
       } else {
         alert(result.message || '暂无错题可汇总');
       }
-    } catch {
+    } catch (err) {
+      console.error('Failed to create wrong book:', err);
       alert('生成错题本失败');
     }
     setWrongBookLoading(false);
@@ -173,7 +183,7 @@ export default function HomePage() {
       )}
 
       {banks.length === 0 ? (
-        <div className="empty-state">还没有题库，点击上方按钮创建一个</div>
+        <div className="empty-state">{loadError ? '加载失败，请刷新页面重试' : '还没有题库，点击上方按钮创建一个'}</div>
       ) : (
         banks.map(b => (
           <div key={b.id} className="card flex items-center justify-between" style={{ cursor: 'pointer' }}

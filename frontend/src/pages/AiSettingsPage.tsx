@@ -29,7 +29,7 @@ export default function AiSettingsPage() {
       setProvider(c.provider);
       setApiBase(c.api_base);
       setModel(c.model);
-    });
+    }).catch(err => console.error('Failed to load AI config:', err));
   }, []);
 
   const handleProviderChange = (p: string) => {
@@ -49,7 +49,7 @@ export default function AiSettingsPage() {
       await updateAiConfig(data);
       setApiKey('');
       alert('保存成功');
-    } catch { alert('保存失败'); }
+    } catch (err) { console.error('Failed to save AI config:', err); alert('保存失败'); }
     setSaving(false);
   };
 

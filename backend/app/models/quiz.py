@@ -36,8 +36,8 @@ class QuizAnswer(Base):
     __tablename__ = "quiz_answers"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(Integer, ForeignKey("quiz_sessions.id"), nullable=False)
-    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("questions.id"), nullable=False)
+    session_id: Mapped[int] = mapped_column(Integer, ForeignKey("quiz_sessions.id"), nullable=False, index=True)
+    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("questions.id"), nullable=False, index=True)
     user_answer: Mapped[str] = mapped_column(Text, default="")
     is_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, server_default=func.now())

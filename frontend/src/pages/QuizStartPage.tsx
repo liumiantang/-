@@ -20,7 +20,7 @@ export default function QuizStartPage() {
   const [loading, setLoading] = useState(false);
   const [reviewDueCount, setReviewDueCount] = useState(0);
 
-  useEffect(() => { listBanks().then(setBanks); }, []);
+  useEffect(() => { listBanks().then(setBanks).catch(err => console.error('Failed to load banks:', err)); }, []);
 
   // Fetch review due count when review mode is selected
   useEffect(() => {
@@ -48,6 +48,8 @@ export default function QuizStartPage() {
 
   const handleStart = async () => {
     if (selectedBanks.length === 0) { alert('请至少选择一个题库'); return; }
+    if (count <= 0) { alert('题目数量至少为 1'); return; }
+    if (diffMin > diffMax) { alert('难度范围设置错误：最小值不能大于最大值'); return; }
     if (!canStartNew()) { alert('已达到同时答题上限（3个），请先完成或提交一个'); return; }
     setLoading(true);
     try {
@@ -133,7 +135,7 @@ export default function QuizStartPage() {
           <label className="form-label">题目数量</label>
           {mode === 'review' ? (
             <div>
-              <input type="number" min={1} max={reviewDueCount || 50} value={count} onChange={e => setCount(Number(e.target.value))}
+              <input type="number" min={1} max={reviewDueCount || 50} value={count || 1} onChange={e => setCount(Number(e.target.value) || 1)}
                 className="form-input-sm" />
               <span style={{ fontSize: '12px', color: '#92400e', marginLeft: '8px' }}>到期题目: {reviewDueCount} 题</span>
             </div>

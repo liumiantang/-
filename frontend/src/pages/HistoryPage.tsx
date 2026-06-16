@@ -7,7 +7,7 @@ export default function HistoryPage() {
   const [items, setItems] = useState<QuizHistoryItem[]>([]);
   const navigate = useNavigate();
 
-  const load = () => getHistory().then(d => setItems(d.items));
+  const load = () => getHistory().then(d => setItems(d.items)).catch(err => console.error('Failed to load history:', err));
 
   useEffect(() => { load(); }, []);
 
@@ -17,7 +17,8 @@ export default function HistoryPage() {
     try {
       await deleteHistory(id);
       load();
-    } catch {
+    } catch (err) {
+      console.error('Failed to delete history:', err);
       alert('删除失败');
     }
   };

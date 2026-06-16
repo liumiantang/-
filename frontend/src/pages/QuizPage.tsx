@@ -19,15 +19,18 @@ export default function QuizPage() {
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const currentIdxRef = useRef(0); // sync ref to avoid stale closures
   const [total, setTotal] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false); // sync ref for double-submit guard
   // Local draft state for fill_blank/essay and multi_choice
   const [draftAnswer, setDraftAnswer] = useState('');
   const [wrongIds, setWrongIds] = useState<Set<number>>(new Set());
   const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [favoriting, setFavoriting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // AI explanation in practice mode
   const [aiExplainingId, setAiExplainingId] = useState<number | null>(null);
   const [aiExplanations, setAiExplanations] = useState<Record<number, string>>({});
@@ -68,11 +71,9 @@ export default function QuizPage() {
 
       // Jump to first unanswered question; if all done, stay on last
       const firstUnanswered = data.questions.findIndex(q => !q.user_answer);
-      if (firstUnanswered >= 0) {
-        setCurrentIdx(firstUnanswered);
-      } else {
-        setCurrentIdx(data.questions.length - 1);
-      }
+      const targetIdx = firstUnanswered >= 0 ? firstUnanswered : data.questions.length - 1;
+      setCurrentIdx(targetIdx);
+      currentIdxRef.current = targetIdx;
 
       // Recompute practice-mode streak from consecutive correct answers
       if (mode === 'practice') {
@@ -92,6 +93,9 @@ export default function QuizPage() {
       // Persist active session so user can navigate back
       addActiveQuiz(sessionId, mode);
       setQuizReady(true);
+    }).catch(err => {
+      console.error('Failed to load quiz:', err);
+      setLoadError('加载答题失败，请返回重试');
     });
   }, [sessionId]);
 
@@ -139,10 +143,28 @@ export default function QuizPage() {
     aiTriggeredRef.current = false;
   }, [currentIdx]);
 
+  // Keep ref in sync with state to avoid stale closures
+  useEffect(() => {
+    currentIdxRef.current = currentIdx;
+  }, [currentIdx]);
+
+  const loadErrorDisplay = loadError ? (
+    <div className="empty-state" style={{ color: '#dc2626' }}>
+      <p>{loadError}</p>
+      <button className="btn btn-outline" style={{ marginTop: 16 }} onClick={() => navigate('/quiz/start')}>
+        ← 返回
+      </button>
+    </div>
+  ) : null;
+
   const q = questions[currentIdx];
+  if (loadError) return loadErrorDisplay;
   if (!q) return <div className="empty-state">加载中...</div>;
 
   const handleAnswer = async (value: string) => {
+    // Sync ref guard prevents double-submission race
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const result = await submitAnswer(sessionId, q.answer_id, value);
@@ -176,28 +198,40 @@ export default function QuizPage() {
         } else {
           setStreak(0);
         }
-        if (!result.is_correct) {
+        // Use strict === false to avoid treating null (essay) as wrong
+        if (result.is_correct === false) {
           setWrongIds(prev => new Set(prev).add(q.answer_id));
         }
 
         if (result.is_correct && (q.type === 'single_choice' || q.type === 'true_false')) {
           // Auto-advance only on correct answers, let user read feedback
+          const idx = currentIdxRef.current;
           setTimeout(() => {
             if (aiTriggeredRef.current) return;
             setFeedback(null);
-            if (currentIdx < questions.length - 1) setCurrentIdx(currentIdx + 1);
+            if (idx < questions.length - 1) {
+              setCurrentIdx(idx + 1);
+              currentIdxRef.current = idx + 1;
+            }
           }, 2000);
         }
       } else {
         // Exam mode: no feedback, just advance
         if (q.type === 'single_choice' || q.type === 'true_false') {
+          const idx = currentIdxRef.current;
           setTimeout(() => {
-            if (currentIdx < questions.length - 1) setCurrentIdx(currentIdx + 1);
+            if (idx < questions.length - 1) {
+              setCurrentIdx(idx + 1);
+              currentIdxRef.current = idx + 1;
+            }
           }, 400);
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('Failed to submit answer:', err);
+    }
     setSubmitting(false);
+    submittingRef.current = false;
   };
 
   const handleAiExplain = async () => {
@@ -223,7 +257,9 @@ export default function QuizPage() {
         await addFavorite(q.question_id);
         setFavorites(prev => new Set(prev).add(q.question_id));
       }
-    } catch {}
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
     setFavoriting(false);
   };
 
@@ -235,10 +271,17 @@ export default function QuizPage() {
   };
 
   const handleFinish = async () => {
+    if (submittingRef.current) return;
     if (!confirm('确定交卷吗？')) return;
-    await finishQuiz(sessionId);
-    removeActiveQuiz(sessionId);
-    navigate(`/quiz/${sessionId}/report`);
+    submittingRef.current = true;
+    try {
+      await finishQuiz(sessionId);
+      removeActiveQuiz(sessionId);
+      navigate(`/quiz/${sessionId}/report`);
+    } catch (err) {
+      console.error('Failed to finish quiz:', err);
+      submittingRef.current = false;
+    }
   };
 
   const userAnswer = answers[q.answer_id] || '';
@@ -297,7 +340,7 @@ export default function QuizPage() {
           </div>
         )}
         <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${((currentIdx + 1) / total) * 100}%` }} />
+          <div className="progress-fill" style={{ width: `${total > 0 ? ((currentIdx + 1) / total) * 100 : 0}%` }} />
         </div>
         <div className="q-dots">
           {questions.map((_, i) => (

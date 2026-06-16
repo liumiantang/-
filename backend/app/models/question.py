@@ -10,7 +10,7 @@ class Question(Base):
     __tablename__ = "questions"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    bank_id: Mapped[int] = mapped_column(Integer, ForeignKey("question_banks.id"), nullable=False)
+    bank_id: Mapped[int] = mapped_column(Integer, ForeignKey("question_banks.id"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(30), nullable=False)  # single_choice/multi_choice/true_false/fill_blank/essay
     difficulty: Mapped[int] = mapped_column(Integer, default=1)
     _tags: Mapped[str] = mapped_column("tags", Text, default="[]")

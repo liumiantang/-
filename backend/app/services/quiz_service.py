@@ -92,9 +92,16 @@ def get_session(db: Session, session_id: int) -> tuple[Optional[QuizSession], Op
     if not session:
         return None, None
 
+    # Batch-load all questions in a single query to avoid N+1
+    question_ids = [ans.question_id for ans in session.answers]
+    q_map = {}
+    if question_ids:
+        questions = db.query(Question).filter(Question.id.in_(question_ids)).all()
+        q_map = {q.id: q for q in questions}
+
     items = []
     for ans in session.answers:
-        q = db.query(Question).filter(Question.id == ans.question_id).first()
+        q = q_map.get(ans.question_id)
         if q:
             items.append({
                 "answer_id": ans.id,
@@ -229,11 +236,12 @@ def delete_session(db: Session, session_id: int) -> bool:
 
 def check_answer(q_type: str, user_answer: str, correct_answer: str) -> bool:
     if q_type == "single_choice":
-        return user_answer.upper() == correct_answer.upper().strip()
+        return user_answer.upper().strip() == correct_answer.upper().strip()
     elif q_type == "multi_choice":
-        return "".join(sorted(user_answer.upper())) == "".join(sorted(correct_answer.upper().strip()))
+        # Strip spaces to handle "A B C" format
+        return "".join(sorted(user_answer.upper().replace(" ", ""))) == "".join(sorted(correct_answer.upper().replace(" ", "").strip()))
     elif q_type == "true_false":
-        return user_answer == correct_answer.strip()
+        return user_answer.strip() == correct_answer.strip()
     elif q_type == "fill_blank":
         return user_answer.strip() == correct_answer.strip()
     elif q_type == "essay":

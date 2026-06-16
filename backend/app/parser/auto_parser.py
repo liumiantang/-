@@ -358,9 +358,15 @@ class AutoParser:
             if not line:
                 continue
 
-            # Sub-section header: "1.1 xxxx", "1.2 xxxx"
-            if re.match(r'^\d+\.\d+\s+\S', line):
-                continue
+            # Sub-section header: "1.1" or "1.1 Title" — only skip if it looks like a
+            # short section title (≤12 chars after the number), not a full question
+            ss_match = re.match(r'^\d+\.\d+\s+(.+)', line)
+            if ss_match:
+                after_num = ss_match.group(1)
+                # Short title → section header to skip
+                if len(after_num) <= 12 and not re.search(r'[。？！,，]', after_num):
+                    continue
+                # Longer content → treat as a question (don't skip)
 
             # Section type headers: 一、单选题... 二、多选题... 三、判断题...
             section_m = re.match(r'^[一二三四五六七八九十]、\s*(单选题|多选题|判断题|填空题|简答题)', line)
@@ -440,7 +446,7 @@ class AutoParser:
                 vals = list(opts.values())
                 if all(v in ('正确', '错误', '对', '错') for v in vals):
                     q.type = "true_false"
-                elif len(q.answer) > 1 and all(c in 'ABCDEFGH' for c in q.answer.upper()):
+                elif len(q.answer.replace(" ", "")) > 1 and all(c in 'ABCDEFGH' for c in q.answer.upper().replace(" ", "")):
                     q.type = "multi_choice"
 
         # True/false answer mapping
@@ -561,7 +567,7 @@ class AutoParser:
         for m in re.finditer(r'([A-H])\s*[\.．、)）:：]\s*', text):
             label = m.group(1)
             start = m.end()
-            next_m = re.search(r'[A-F]\s*[\.．、)）:：]', text[start:])
+            next_m = re.search(r'[A-H]\s*[\.．、)）:：]', text[start:])
             end = start + next_m.start() if next_m else len(text)
             yield label, text[start:end].strip()
 

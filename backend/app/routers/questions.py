@@ -88,12 +88,18 @@ def remove_favorite(question_id: int, db: Session = Depends(get_db)):
 @router.get("/favorites")
 def list_favorites(db: Session = Depends(get_db)):
     favs = db.query(Favorite).order_by(Favorite.created_at.desc()).all()
+    if not favs:
+        return {"items": [], "total": 0}
+    # Batch-load all favorited questions in a single query
+    qid_map = {f.question_id: f.id for f in favs}
+    questions = db.query(Question).filter(Question.id.in_(list(qid_map.keys()))).all()
+    q_map = {q.id: q for q in questions}
     items = []
-    for f in favs:
-        q = db.query(Question).filter(Question.id == f.question_id).first()
+    for qid, fid in qid_map.items():
+        q = q_map.get(qid)
         if q:
             items.append({
-                "favorite_id": f.id,
+                "favorite_id": fid,
                 "question_id": q.id,
                 "type": q.type,
                 "content": q.content,

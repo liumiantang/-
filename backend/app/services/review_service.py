@@ -67,8 +67,9 @@ def get_due_reviews(
 ) -> list[dict]:
     """Get questions that are due for review (next_review_at <= now)."""
     now = datetime.now()
+    # Join with ReviewSchedule and select both in one query
     query = (
-        db.query(Question)
+        db.query(Question, ReviewSchedule)
         .join(ReviewSchedule, ReviewSchedule.question_id == Question.id)
         .filter(ReviewSchedule.next_review_at <= now)
         .filter(ReviewSchedule.next_review_at.isnot(None))
@@ -80,8 +81,9 @@ def get_due_reviews(
     if limit:
         query = query.limit(limit)
 
-    return [
-        {
+    result = []
+    for q, rs in query.all():
+        result.append({
             "id": q.id,
             "bank_id": q.bank_id,
             "type": q.type,
@@ -91,11 +93,10 @@ def get_due_reviews(
             "answer": q.answer,
             "explanation": q.explanation,
             "tags": q.tags,
-            "review_stage": _get_stage_for_question(db, q.id),
-            "next_review_at": _get_next_review_for_question(db, q.id),
-        }
-        for q in query.all()
-    ]
+            "review_stage": rs.stage if rs else 0,
+            "next_review_at": rs.next_review_at.isoformat() if rs and rs.next_review_at else None,
+        })
+    return result
 
 
 def get_review_stats(db: Session) -> dict:
@@ -110,12 +111,14 @@ def get_review_stats(db: Session) -> dict:
         .count()
     )
 
-    # Stage distribution
-    stage_dist = {}
-    for stage in range(0, 7):
-        count = db.query(ReviewSchedule).filter(ReviewSchedule.stage == stage).count()
-        if count > 0 or stage == 0:
-            stage_dist[str(stage)] = count
+    # Stage distribution — single query with GROUP BY
+    from sqlalchemy import func
+    rows = (
+        db.query(ReviewSchedule.stage, func.count(ReviewSchedule.id))
+        .group_by(ReviewSchedule.stage)
+        .all()
+    )
+    stage_dist = {str(stage): cnt for stage, cnt in rows}
 
     # Fully mastered (stage 6, no next review)
     mastered = db.query(ReviewSchedule).filter(ReviewSchedule.stage >= 6).count()
