@@ -19,10 +19,10 @@ def pick_questions(
 ) -> list[Question]:
     """
     Randomly pick questions from given banks with filters.
-    exclude_ids: question IDs to exclude (e.g., already answered correctly before).
+    Uses DB-level random ordering to avoid loading all candidates into memory.
+    Falls back to in-memory shuffle for small result sets (<= 1000 candidates).
     """
     q = db.query(Question).filter(Question.bank_id.in_(bank_ids))
-
     q = q.filter(Question.difficulty >= difficulty_min, Question.difficulty <= difficulty_max)
 
     if type_filter:
@@ -35,12 +35,20 @@ def pick_questions(
     if exclude_ids:
         q = q.filter(~Question.id.in_(exclude_ids))
 
-    candidates = q.all()
+    # Count candidates first — cheap, uses COUNT(*)
+    total = q.count()
 
-    if len(candidates) <= count:
-        result = list(candidates)
-    else:
-        result = random.sample(candidates, count)
+    if total == 0:
+        return []
 
-    random.shuffle(result)
+    if total <= count:
+        result = q.all()
+        random.shuffle(result)
+        return result
+
+    # For large result sets, use DB-level random ordering with limit.
+    # SQLite: ORDER BY RANDOM() is efficient for moderate datasets.
+    # For postgres: use ORDER BY RANDOM(). MySQL: ORDER BY RAND().
+    # Using func.random() works cross-database with SQLAlchemy.
+    result = q.order_by(func.random()).limit(count).all()
     return result

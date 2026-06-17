@@ -161,7 +161,17 @@ export default function QuizPage() {
   if (loadError) return loadErrorDisplay;
   if (!q) return <div className="empty-state">加载中...</div>;
 
-  const handleAnswer = async (value: string) => {
+  const handleDotClick = (i: number) => {
+    // Warn if user has unsaved draft on current question
+    const currentQ = questions[currentIdx];
+    const saved = answers[currentQ?.answer_id] || '';
+    const hasDraft = draftAnswer && draftAnswer !== saved;
+    if (hasDraft && !confirm('当前题目有未提交的答案，切换题目将丢失草稿。确定要跳转吗？')) {
+      return;
+    }
+    setCurrentIdx(i);
+    currentIdxRef.current = i;
+  };
     // Sync ref guard prevents double-submission race
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -344,7 +354,7 @@ export default function QuizPage() {
         </div>
         <div className="q-dots">
           {questions.map((_, i) => (
-            <button key={i} onClick={() => setCurrentIdx(i)}
+            <button key={i} onClick={() => handleDotClick(i)}
               className={`q-dot ${i === currentIdx ? 'active' : ''} ${wrongIds.has(questions[i].answer_id) ? 'wrong' : answers[questions[i].answer_id] ? 'answered' : ''}`}>
               {i + 1}
             </button>

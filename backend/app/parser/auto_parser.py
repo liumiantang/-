@@ -534,11 +534,16 @@ class AutoParser:
 
         q.options = {k: v for k, v in sorted(labeled.items())}
 
-        if "多选" in content:
+        # Type detection from content — only when keywords indicate the section type.
+        # Be conservative: "判断" alone is too common in Chinese text, so only
+        # classify as true_false when options actually look like true/false answers.
+        if "多选" in content and q.options:
             q.type = "multi_choice"
-        elif "判断" in content:
-            q.type = "true_false"
-        elif "填空" in content or "_____" in content:
+        elif ("判断题" in content or "判断" in content) and q.options:
+            vals = list(q.options.values())
+            if all(v in ('正确', '错误', '对', '错') for v in vals):
+                q.type = "true_false"
+        elif ("填空" in content or "_____" in content) and not q.options:
             q.type = "fill_blank"
 
         return q
