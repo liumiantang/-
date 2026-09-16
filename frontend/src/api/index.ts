@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { QuestionBank, Question, QuizSession, QuizHistoryItem, StartQuizParams, UserStats, AiConfig, AiGenerateResult, AiUsage, ReviewDue, ReviewStats } from '../types';
+import type { QuestionBank, Question, QuizSession, QuizHistoryItem, StartQuizParams, UserStats, AiConfig, AiGenerateResult, AiUsage, ReviewDue, ReviewStats, GradeEssayResponse } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -17,6 +17,11 @@ export const importDocument = (bankId: number, file: File) => {
   const fd = new FormData();
   fd.append('file', file);
   return api.post(`/banks/${bankId}/import`, fd).then(r => r.data);
+};
+export const importDocumentAi = (bankId: number, file: File) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  return api.post<{ imported: number; filename: string; method: string }>(`/banks/${bankId}/import-ai`, fd).then(r => r.data);
 };
 
 // Questions
@@ -71,6 +76,8 @@ export const getAiUsage = () =>
   api.get<AiUsage>('/ai/usage').then(r => r.data);
 export const clearAiUsage = () =>
   api.delete('/ai/usage').then(r => r.data);
+export const gradeEssay = (sessionId: number, answerId: number) =>
+  api.post<GradeEssayResponse>('/ai/grade', { session_id: sessionId, answer_id: answerId }).then(r => r.data);
 
 // Review (Ebbinghaus)
 export const getReviewDue = (bankIds?: number[], limit?: number) => {

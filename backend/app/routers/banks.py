@@ -101,6 +101,37 @@ def import_questions(bank_id: int, file: UploadFile = File(...), db: Session = D
             pass
 
 
+@router.post("/banks/{bank_id}/import-ai")
+def import_document_ai(
+    bank_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Import questions from a document using AI to parse the extracted text."""
+    original_name = file.filename or "untitled"
+    safe_name = os.path.basename(original_name)
+
+    # Size limit: 50 MB
+    MAX_SIZE = 50 * 1024 * 1024
+    UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    filepath = os.path.join(UPLOAD_DIR, safe_name)
+
+    try:
+        with open(filepath, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        count = bank_service.import_document_ai(db, bank_id, filepath, original_name)
+        return {"imported": count, "filename": original_name, "method": "ai"}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    finally:
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
+
+
 @router.post("/banks/wrong-answer-book")
 def create_wrong_answer_book(db: Session = Depends(get_db)):
     # Find all wrong-answered questions

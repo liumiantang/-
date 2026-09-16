@@ -1,9 +1,9 @@
 # 📚 题库抽题系统
 
-一个基于 FastAPI + React 的智能题库管理系统，支持多种文档格式导入、练习/考试双模式答题、错题本自动汇总、题目收藏等功能。
+一个基于 FastAPI + React 的智能题库管理系统，支持多种文档格式导入、练习/考试双模式答题、错题本自动汇总、题目收藏、艾宾浩斯复习和 AI 辅助出题等功能。
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
-[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6.svg)](https://www.typescriptlang.org/)
 
@@ -14,6 +14,8 @@
 ### 题库管理
 - **多题库支持** — 创建/删除题库，每个题库独立管理题目
 - **智能解析** — 自动识别文档格式，支持 `.docx` / `.xlsx` / `.md` / `.txt` / `.pdf`
+- **表格导入** — 支持 `.csv` 题库文件
+- **扫描件 OCR** — 文本型 PDF 直接解析，扫描型 PDF 可使用 Tesseract OCR
 - **题型识别** — 自动识别单选题、多选题、判断题、填空题，支持从章节标题推断题型
 - **答案提取** — 支持 `正确答案：X` 和 `答案：X` 两种标记格式
 - **题目编辑** — 在线修改答案、查看解析、题型筛选
@@ -23,6 +25,8 @@
 - **📖 练习模式** — 每道题提交后立即显示对错、正确答案和解析
 - **进度追踪** — 题号指示器，绿色=已答，红色=答错，蓝色=当前
 - **多题型支持** — 单选、多选（确认提交）、判断、填空/简答
+- **复习模式** — 从首页复习提醒进入，自动覆盖所有题库中的到期题目
+- **简答题评分** — 作答报告支持 AI 评分；未配置 AI 时保留待评分状态
 
 ### 错题本 & 收藏
 - **⭐ 收藏夹** — 练习模式中一键收藏题目，导航栏独立入口查看
@@ -33,11 +37,18 @@
 - 分数统计 + 正确率进度条
 - 逐题复盘：每道题标注对错，高亮你的答案和正确答案
 - 错题附带解析说明
+- 简答题可在报告页发起 AI 评分
 
 ### 智能抽题
 - 跨题库抽题、按难度范围筛选
 - 按题型过滤（单选/多选/判断/填空）
 - 排除已答对题目，避免重复
+
+### AI 与学习辅助
+- AI 生成题目和解析（需要配置 OpenAI 兼容 API）
+- 艾宾浩斯复习提醒与到期题目抽取
+- 学习统计、连续学习和成就数据
+- 主题切换与未完成答题会话恢复
 
 ---
 
@@ -63,6 +74,17 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 5201
 # 3. 浏览器访问
 # http://127.0.0.1:5201
 ```
+
+### OCR 配置（可选）
+
+扫描型 PDF 需要额外安装 Tesseract OCR，并确保 `tesseract` 命令在 PATH 中。也可以通过环境变量指定路径：
+
+```powershell
+$env:TESSERACT_CMD = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+$env:TESSDATA_PREFIX = "C:\Program Files\Tesseract-OCR\tessdata"
+```
+
+中文扫描件还需要安装 Tesseract 的 `chi_sim` 语言数据。EasyOCR 是可选增强项；未安装时会自动回退到 Tesseract。
 
 ### 构建前端（开发时）
 
@@ -197,9 +219,9 @@ B. 选项B
 |------|------|
 | 后端框架 | FastAPI (Python) |
 | 数据库 | SQLite + SQLAlchemy ORM |
-| 前端框架 | React 18 + TypeScript |
+| 前端框架 | React + TypeScript |
 | 构建工具 | Vite |
-| 文档解析 | python-docx, openpyxl, pdfplumber |
+| 文档解析 | python-docx, openpyxl, pdfplumber, PyPDF2, PyMuPDF, Tesseract |
 | 样式 | 纯 CSS（无第三方 UI 库） |
 
 ---

@@ -31,7 +31,8 @@ class TextParser:
         blocks = self._split_blocks(text)
         for block in blocks:
             q = self._parse_block(block)
-            if q and q.content and q.answer:
+            # Essay questions may not have an answer in the template (AI grades later)
+            if q and q.content and (q.answer or q.type == "essay"):
                 questions.append(q)
         return questions
 

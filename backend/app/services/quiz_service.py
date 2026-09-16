@@ -113,6 +113,8 @@ def get_session(db: Session, session_id: int) -> tuple[Optional[QuizSession], Op
                 "is_correct": ans.is_correct if session.is_finished else None,
                 "explanation": q.explanation if session.is_finished else "",
                 "correct_answer": q.answer if session.is_finished else "",
+                "ai_score": ans.ai_score,
+                "ai_feedback": ans.ai_feedback if session.is_finished else "",
             })
     return session, items
 
@@ -146,6 +148,7 @@ def submit_answer(db: Session, session_id: int, answer_id: int, user_answer: str
             "correct_answer": q.answer if q.type != "essay" else "",
             "explanation": q.explanation,
             "review": review_info,
+            "needs_grading": q.type == "essay",
         }
     elif mode == "review":
         return {
@@ -153,6 +156,7 @@ def submit_answer(db: Session, session_id: int, answer_id: int, user_answer: str
             "correct_answer": q.answer if q.type != "essay" else "",
             "explanation": q.explanation,
             "review": review_info,
+            "needs_grading": q.type == "essay",
         }
     else:
         # Exam mode: don't reveal correct answer or explanation
@@ -163,22 +167,54 @@ def submit_answer(db: Session, session_id: int, answer_id: int, user_answer: str
         }
 
 
+def _apply_session_score(db: Session, session: QuizSession) -> None:
+    """Recalculate a session after objective or AI essay grading changes."""
+    answers = db.query(QuizAnswer).filter(QuizAnswer.session_id == session.id).all()
+    question_ids = [a.question_id for a in answers]
+    q_map = {}
+    if question_ids:
+        questions = db.query(Question).filter(Question.id.in_(question_ids)).all()
+        q_map = {q.id: q for q in questions}
+
+    objective_correct = 0
+    essay_correct = 0
+    ai_score_sum = 0.0
+    for ans in answers:
+        q = q_map.get(ans.question_id)
+        if q and q.type == "essay":
+            if ans.ai_score is not None:
+                ai_score_sum += ans.ai_score
+                if ans.ai_score >= 60:
+                    essay_correct += 1
+        elif ans.is_correct:
+            objective_correct += 1
+
+    total = session.total_questions
+    session.correct_count = objective_correct + essay_correct
+    # Keep the legacy numeric score column populated; ungraded essays
+    # contribute zero until the user runs AI grading from the report.
+    session.score = round((objective_correct * 100 + ai_score_sum) / total, 1) if total > 0 else 0
+
+
+def recalculate_session_score(db: Session, session_id: int) -> Optional[QuizSession]:
+    """Persist the latest score after an essay is graded."""
+    session = db.query(QuizSession).filter(QuizSession.id == session_id).first()
+    if not session:
+        return None
+    _apply_session_score(db, session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 def finish_session(db: Session, session_id: int) -> Optional[dict]:
     session = db.query(QuizSession).filter(QuizSession.id == session_id).first()
     if not session:
         return None
 
-    # Count correct
-    correct = (
-        db.query(QuizAnswer)
-        .filter(QuizAnswer.session_id == session_id, QuizAnswer.is_correct == True)  # noqa: E712
-        .count()
-    )
-
-    session.correct_count = correct
-    session.score = round(correct / session.total_questions * 100, 1) if session.total_questions > 0 else 0
     session.is_finished = True
     session.finished_at = datetime.now()
+    _apply_session_score(db, session)
     db.commit()
 
     return {

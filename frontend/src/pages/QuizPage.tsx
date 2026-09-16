@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getQuiz, submitAnswer, finishQuiz, addFavorite, removeFavorite, getFavorites, aiExplain, deleteHistory } from '../api';
+import { getQuiz, submitAnswer, finishQuiz, addFavorite, removeFavorite, getFavorites, aiExplain, deleteHistory, gradeEssay } from '../api';
 import { addActiveQuiz, removeActiveQuiz } from '../activeQuiz';
 import type { QuizQuestion } from '../types';
 
@@ -46,6 +46,11 @@ export default function QuizPage() {
   const [streakAnim, setStreakAnim] = useState<string | null>(null);
   // Review mode: track per-question review info
   const [reviewInfos, setReviewInfos] = useState<Record<number, { stage: number; next_review_at: string | null }>>({});
+  // AI grading for essay questions
+  const [gradingId, setGradingId] = useState<number | null>(null);
+  const [aiScores, setAiScores] = useState<Record<number, number>>({});
+  const [aiFeedbacks, setAiFeedbacks] = useState<Record<number, string>>({});
+  const [needsGrading, setNeedsGrading] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     getQuiz(sessionId).then(data => {
@@ -172,6 +177,8 @@ export default function QuizPage() {
     setCurrentIdx(i);
     currentIdxRef.current = i;
   };
+
+  const handleAnswer = async (value: string) => {
     // Sync ref guard prevents double-submission race
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -190,6 +197,10 @@ export default function QuizPage() {
         // Track review info if available
         if (result.review) {
           setReviewInfos(prev => ({ ...prev, [q.answer_id]: result.review }));
+        }
+        // Essay needs AI grading
+        if (result.needs_grading) {
+          setNeedsGrading(prev => ({ ...prev, [q.answer_id]: true }));
         }
         // Streak tracking
         if (result.is_correct) {
@@ -254,6 +265,18 @@ export default function QuizPage() {
       alert('AI 解析失败: ' + (err.response?.data?.detail || err.message));
     }
     setAiExplainingId(null);
+  };
+
+  const handleGradeEssay = async () => {
+    setGradingId(q.answer_id);
+    try {
+      const result = await gradeEssay(sessionId, q.answer_id);
+      setAiScores(prev => ({ ...prev, [q.answer_id]: result.score }));
+      setAiFeedbacks(prev => ({ ...prev, [q.answer_id]: result.feedback }));
+    } catch (err: any) {
+      alert('AI 评分失败: ' + (err.response?.data?.detail || err.message));
+    }
+    setGradingId(null);
   };
 
   const handleToggleFavorite = async () => {
@@ -545,6 +568,43 @@ export default function QuizPage() {
               </div>
             </div>
           )}
+          {/* AI Grading for essay */}
+          {needsGrading[q.answer_id] && !aiScores[q.answer_id] && (
+            <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '2px dashed #fcd34d' }}>
+              <button onClick={handleGradeEssay}
+                disabled={gradingId === q.answer_id}
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none',
+                  borderRadius: 'var(--radius-md)', padding: '10px 20px', fontSize: '14px',
+                  fontWeight: 700, color: '#fff', cursor: 'pointer', width: '100%',
+                }}>
+                {gradingId === q.answer_id ? '⏳ AI 正在评分...' : '🤖 AI 智能评分'}
+              </button>
+            </div>
+          )}
+          {aiScores[q.answer_id] !== undefined && (
+            <div style={{
+              marginTop: '12px', paddingTop: '10px', borderTop: '2px dashed #e5e7eb',
+            }}>
+              <div style={{
+                padding: '12px 16px', borderRadius: '10px',
+                background: aiScores[q.answer_id] >= 60 ? '#f0fdf4' : aiScores[q.answer_id] >= 40 ? '#fffbeb' : '#fef2f2',
+                border: aiScores[q.answer_id] >= 60 ? '2px solid #16a34a' : aiScores[q.answer_id] >= 40 ? '2px solid #f59e0b' : '2px solid #dc2626',
+              }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '6px',
+                  color: aiScores[q.answer_id] >= 60 ? '#16a34a' : aiScores[q.answer_id] >= 40 ? '#d97706' : '#dc2626',
+                }}>
+                  🤖 AI 评分：{aiScores[q.answer_id]} 分
+                </div>
+                {aiFeedbacks[q.answer_id] && (
+                  <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: 1.6 }}>
+                    {aiFeedbacks[q.answer_id]}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* AI Explain button */}
           <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '2px dashed #e5e7eb' }}>
             {aiExplanations[q.answer_id] ? (

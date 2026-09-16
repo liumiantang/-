@@ -40,6 +40,8 @@ class QuizAnswer(Base):
     question_id: Mapped[int] = mapped_column(Integer, ForeignKey("questions.id"), nullable=False, index=True)
     user_answer: Mapped[str] = mapped_column(Text, default="")
     is_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    ai_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)          # 0-100 AI grading score
+    ai_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)          # AI grading feedback
     answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, server_default=func.now())
 
     session: Mapped["QuizSession"] = relationship(back_populates="answers")

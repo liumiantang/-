@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getBank, getQuestions, importDocument, deleteQuestion, updateQuestion, aiExplain } from '../api';
+import { getBank, getQuestions, importDocument, importDocumentAi, deleteQuestion, updateQuestion, aiExplain } from '../api';
 import type { QuestionBank, Question } from '../types';
 
 export default function BankDetailPage() {
@@ -8,11 +8,13 @@ export default function BankDetailPage() {
   const bankId = Number(id);
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
+  const aiFileRef = useRef<HTMLInputElement>(null);
 
   const [bank, setBank] = useState<QuestionBank | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
   const [importing, setImporting] = useState(false);
+  const [aiImporting, setAiImporting] = useState(false);
   const [typeFilter, setTypeFilter] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editAnswer, setEditAnswer] = useState('');
@@ -42,6 +44,21 @@ export default function BankDetailPage() {
     }
     setImporting(false);
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const handleAiImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAiImporting(true);
+    try {
+      const result = await importDocumentAi(bankId, file);
+      alert(`AI 智能导入成功：${result.imported} 道题目`);
+      load();
+    } catch (err: any) {
+      alert('AI 导入失败: ' + (err.response?.data?.detail || err.message));
+    }
+    setAiImporting(false);
+    if (aiFileRef.current) aiFileRef.current.value = '';
   };
 
   const handleDelete = async (qId: number) => {
@@ -120,9 +137,17 @@ export default function BankDetailPage() {
 
         <button onClick={() => fileRef.current?.click()} disabled={importing}
           className="btn btn-success">
-          {importing ? '导入中...' : '📥 导入文档'}
+          {importing ? '导入中...' : '📥 普通导入'}
         </button>
         <input ref={fileRef} type="file" accept=".md,.txt,.xlsx,.xls,.docx,.pdf" onChange={handleImport} style={{ display: 'none' }} />
+        <button onClick={() => aiFileRef.current?.click()} disabled={aiImporting}
+          className="btn" style={{
+            background: 'linear-gradient(135deg, #8b5cf6, #6366f1)', color: '#fff',
+            border: 'none', fontWeight: 600
+          }}>
+          {aiImporting ? 'AI 解析中...' : '🤖 AI 智能导入'}
+        </button>
+        <input ref={aiFileRef} type="file" accept=".md,.txt,.xlsx,.xls,.docx,.pdf" onChange={handleAiImport} style={{ display: 'none' }} />
         <span className="text-sm text-gray">支持 .md / .txt / .xlsx / .docx / .pdf</span>
       </div>
 

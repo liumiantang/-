@@ -55,6 +55,12 @@ def get_quiz(session_id: int, db: Session = Depends(get_db)):
     session, items = quiz_service.get_session(db, session_id)
     if not session:
         raise HTTPException(404, "作答记录不存在")
+    pending_count = sum(
+        1 for item in (items or [])
+        if item.get("type") == "essay"
+        and item.get("user_answer", "").strip()
+        and item.get("ai_score") is None
+    ) if session.is_finished else 0
     return {
         "session_id": session.id,
         "is_finished": session.is_finished,
@@ -62,6 +68,7 @@ def get_quiz(session_id: int, db: Session = Depends(get_db)):
         "score": session.score if session.is_finished else None,
         "time_limit": session.settings.get("time_limit") if session.settings else None,
         "started_at": session.started_at.isoformat() if session.started_at else None,
+        "pending_count": pending_count,
         "questions": items,
     }
 

@@ -48,6 +48,11 @@ class AutoParser:
 
         return []
 
+    def extract_text(self, filepath: str) -> str:
+        """Extract raw text from document without parsing into questions."""
+        ext = filepath.rsplit(".", 1)[-1].lower()
+        return self._extract_text(filepath, ext)
+
     def extract_bank_name(self, filepath: str) -> str:
         ext = filepath.rsplit(".", 1)[-1].lower()
         text = self._extract_text(filepath, ext)
@@ -152,9 +157,11 @@ class AutoParser:
         multi-column layouts and interspersed formulas.
         """
         global _easyocr_reader
-        import numpy as np
 
         try:
+            # EasyOCR is optional. Missing optional packages must fall through
+            # to the Tesseract implementation instead of aborting PDF import.
+            import numpy as np
             if _easyocr_reader is None:
                 import easyocr
                 _easyocr_reader = easyocr.Reader(['ch_sim', 'en'], gpu=False)
@@ -223,16 +230,22 @@ class AutoParser:
 
     def _ocr_pdf(self, filepath: str) -> str:
         """OCR a scanned PDF using Tesseract via pymupdf rendering."""
-        import os
-        import pytesseract
-        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-        # Point to user-writable tessdata with Chinese language pack
-        os.environ["TESSDATA_PREFIX"] = r"C:\Users\24525\tessdata"
-
         try:
+            import os
+            import shutil
+            import pytesseract
             import fitz
             from PIL import Image
             import io
+
+            # Prefer explicit configuration, otherwise let pytesseract find
+            # the executable on PATH. Never assume a developer-specific path.
+            tesseract_cmd = os.getenv("TESSERACT_CMD") or shutil.which("tesseract")
+            if tesseract_cmd:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+            tessdata_prefix = os.getenv("TESSDATA_PREFIX")
+            if tessdata_prefix:
+                os.environ["TESSDATA_PREFIX"] = tessdata_prefix
 
             doc = fitz.open(filepath)
             pages_text = []
@@ -545,6 +558,8 @@ class AutoParser:
                 q.type = "true_false"
         elif ("填空" in content or "_____" in content) and not q.options:
             q.type = "fill_blank"
+        elif "简答" in content or "论述" in content:
+            q.type = "essay"
 
         return q
 
@@ -597,6 +612,7 @@ class AutoParser:
         is_multi_section = False
         is_single_section = False
         is_tf_section = False
+        is_essay_section = False
 
         q_pattern = re.compile(r'^(\d+)[\.。、．，,:\s\)]{1,4}')
         # Option label: case-insensitive, matches A. B、 C： etc (also handles OCR lowercase)
@@ -641,6 +657,10 @@ class AutoParser:
                     content = TF_ANS.sub('', content, count=1).strip().rstrip(')）')
                     current_block["content"] = content
                     current_block['section_type'] = 'true_false'
+
+            # Essay section: mark the block type
+            if is_essay_section:
+                current_block['section_type'] = 'essay'
 
             # If no options and no answer, try extra_lines
             if not current_block["options"] and not current_block["answer"]:
@@ -710,6 +730,13 @@ class AutoParser:
                     is_multi_section = False
                     is_single_section = False
                     is_tf_section = True
+                    is_essay_section = False
+                elif "简答" in sec_name or "论述" in sec_name:
+                    is_fill_section = False
+                    is_multi_section = False
+                    is_single_section = False
+                    is_tf_section = False
+                    is_essay_section = True
                 # Flush any pending question before section change
                 if current_block["content"]:
                     _flush_block()

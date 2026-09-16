@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import ai_config, ai_usage
-from ..services import ai_service, bank_service
+from ..services import ai_service, bank_service, quiz_service
 from ..models.question import Question
 
 router = APIRouter()
@@ -168,3 +168,55 @@ def get_usage():
 def clear_usage():
     ai_usage.clear_usage()
     return {"ok": True}
+
+
+# ── Grade essay ────────────────────────────────────────────────
+
+class GradeRequest(BaseModel):
+    session_id: int
+    answer_id: int
+
+
+@router.post("/api/ai/grade")
+def grade_essay_endpoint(req: GradeRequest, db: Session = Depends(get_db)):
+    from ..models.quiz import QuizAnswer
+
+    ans = (
+        db.query(QuizAnswer)
+        .filter(QuizAnswer.id == req.answer_id, QuizAnswer.session_id == req.session_id)
+        .first()
+    )
+    if not ans:
+        raise HTTPException(404, "作答记录不存在")
+
+    q = db.query(Question).filter(Question.id == ans.question_id).first()
+    if not q:
+        raise HTTPException(404, "题目不存在")
+
+    if q.type != "essay":
+        raise HTTPException(400, "该题目不是简答题，无需 AI 评分")
+
+    if not ans.user_answer.strip():
+        raise HTTPException(400, "请先提交答案再评分")
+
+    score, feedback = ai_service.grade_essay(
+        question_content=q.content,
+        reference_answer=q.answer,
+        user_answer=ans.user_answer,
+    )
+
+    if score is None:
+        raise HTTPException(400, "AI 评分失败，请检查 API 配置")
+
+    # Persist grading result
+    ans.ai_score = score
+    ans.ai_feedback = feedback
+    # Also mark is_correct based on score >= 60 for scoring purposes
+    if score >= 60:
+        ans.is_correct = True
+    else:
+        ans.is_correct = False
+    db.commit()
+    quiz_service.recalculate_session_score(db, req.session_id)
+
+    return {"score": score, "feedback": feedback, "answer_id": req.answer_id}

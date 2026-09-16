@@ -28,6 +28,8 @@ export interface QuizQuestion {
   is_correct: boolean | null;
   explanation: string;
   correct_answer: string;
+  ai_score: number | null;
+  ai_feedback: string;
 }
 
 export interface QuizSession {
@@ -35,6 +37,7 @@ export interface QuizSession {
   is_finished: boolean;
   total_questions: number;
   score: number | null;
+  pending_count?: number;
   time_limit?: number;
   started_at?: string;
   questions: QuizQuestion[];
@@ -116,11 +119,18 @@ export interface SubmitAnswerResponse {
   is_correct: boolean | null;
   correct_answer: string;
   explanation: string;
+  needs_grading?: boolean;
   review?: {
     stage: number;
     next_review_at: string | null;
     review_count: number;
   };
+}
+
+export interface GradeEssayResponse {
+  score: number;
+  feedback: string;
+  answer_id: number;
 }
 
 export interface FavoriteItem {

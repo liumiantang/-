@@ -6,6 +6,7 @@ import type { QuestionBank } from '../types';
 
 export default function QuizStartPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const initialMode = (searchParams.get('mode') as 'practice' | 'exam' | 'review') || 'exam';
   const [banks, setBanks] = useState<QuestionBank[]>([]);
   const [selectedBanks, setSelectedBanks] = useState<number[]>([]);
@@ -21,6 +22,15 @@ export default function QuizStartPage() {
   const [reviewDueCount, setReviewDueCount] = useState(0);
 
   useEffect(() => { listBanks().then(setBanks).catch(err => console.error('Failed to load banks:', err)); }, []);
+
+  // The home-page review reminder opens this page without bank selections.
+  // Review mode should cover all banks by default instead of failing the
+  // start request with "请至少选择一个题库".
+  useEffect(() => {
+    if (mode === 'review' && banks.length > 0) {
+      setSelectedBanks(prev => prev.length > 0 ? prev : banks.map(bank => bank.id));
+    }
+  }, [mode, banks]);
 
   // Fetch review due count when review mode is selected
   useEffect(() => {
@@ -47,14 +57,17 @@ export default function QuizStartPage() {
   const activeQuizzes = getActiveQuizzes();
 
   const handleStart = async () => {
-    if (selectedBanks.length === 0) { alert('请至少选择一个题库'); return; }
+    const bankIds = mode === 'review' && selectedBanks.length === 0
+      ? banks.map(bank => bank.id)
+      : selectedBanks;
+    if (bankIds.length === 0) { alert('请至少选择一个题库'); return; }
     if (count <= 0) { alert('题目数量至少为 1'); return; }
     if (diffMin > diffMax) { alert('难度范围设置错误：最小值不能大于最大值'); return; }
     if (!canStartNew()) { alert('已达到同时答题上限（3个），请先完成或提交一个'); return; }
     setLoading(true);
     try {
       const result = await startQuiz({
-        bank_ids: selectedBanks,
+        bank_ids: bankIds,
         count,
         difficulty_min: diffMin,
         difficulty_max: diffMax,
@@ -171,6 +184,7 @@ export default function QuizStartPage() {
                 { k: 'multi_choice', v: '多选题' },
                 { k: 'true_false', v: '判断题' },
                 { k: 'fill_blank', v: '填空题' },
+                { k: 'essay', v: '简答题' },
               ].map(({ k, v }) => (
                 <button key={k} onClick={() => toggleType(k)}
                   className={typeFilter.includes(k) ? 'btn btn-primary' : 'btn btn-outline'}
